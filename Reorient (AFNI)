@@ -1,0 +1,85 @@
+# Only necessary for sphinx-posture, which is used for non-human animal data
+
+#!/bin/bash
+data_source=
+output_dir=
+echo $data_source
+#input id_info
+read -e -n10 -a subid -p subid:  
+read -e -n10 -a session -p session:  
+read -e -n10 -a class -p class[anat/epi]: 
+read -e -n10 -a dcm -p dcm_info[IMA/dcm]:
+read -e -n10 -a aw_opt -p choose_aw[yes/no]:
+read -e -n10 -a zeropad -p zeropad[yes/no]:
+echo id = $subid
+echo session = $session
+echo class = $class
+echo dcm = $dcm
+echo zeropad = $zeropad
+
+if [ ${class} = 'epi' ] ; then
+	declare -a myArray
+	while IFS=' ' read -r index seq
+	do	
+		myArray[$index]="$seq"
+	done < "list_convert.txt"
+	for i in "${!myArray[@]}" ; do
+		seq=$(printf "%02d\n" "${myArray[$i]}")
+		run=$(printf "%02d\n" "$i")
+		echo $i $seq
+		cd ../${session}/${i}_data/
+		dcm2niix_afni -f ${subid}_$seq -o $output_dir  ${data_source}*.$dcm
+		cd $output_dir
+		3dresample -orient RIA -input ${output_dir}${subid}_$seq.nii -prefix ${subid}_${seq}_$class
+		3drefit -orient LPS ${subid}_${seq}_${class}+orig.HEAD
+		rm ${output_dir}/${subid}_$seq.nii
+		rm ${output_dir}/${subid}_$seq.json
+	done
+fi
+
+if [ ${class} = 'anat' ] ; then
+#convert dicom2nii
+dcm2niix_afni -f $subid  -o $output_dir  ${data_source}*.$dcm
+#reorient 
+
+cd $output_dir
+3dresample -orient LPI -input ${output_dir}$subid.nii -prefix ${subid}_${session}_${class}
+3drefit -orient RIP ${subid}_${session}_${class}+orig.HEAD
+#remove jk files
+rm ${output_dir}/$subid.nii
+rm ${output_dir}/$subid.json
+fi
+
+#manual remove skull
+if [ ${zeropad} = 'yes' ] ; then
+read -e -n10 -a l -p L:
+read -e -n10 -a r -p R:
+read -e -n10 -a I -p I:
+read -e -n10 -a s -p S:
+read -e -n10 -a a -p A:
+read -e -n10 -a p -p P:
+	3dZeropad -L -$l -R -$r -I -$I -S -$s -A -$a -P -$p  -prefix ${subid}_${session}_${class}_z+orig.HEAD ${subid}_${session}_${class}+orig.HEAD
+	if [ ${aw_opt} = 'yes' ] ; then #registration
+		@animal_warper -base "NMT_v2.0_sym_05mm_SS.nii.gz"                                            \
+                   -input "${subid}_${session}_${class}_z+orig.HEAD"                              \
+                   -align_type all  -seg_followers "NMT_v2.0_sym_05mm_segmentation.nii.gz"        \
+                   -atlas_followers "CHARM_in_NMT_v2.0_sym_05mm.nii.gz"                           \
+                   -outdir "${output_dir}aw_result/${subid}_${session}_${class}"                  
+	fi
+	if  [ ${aw_opt} = 'no' ] ; then
+        echo  "please check your epi data"
+	fi
+fi
+#no zeropad
+if [ ${zeropad} = 'no' ] ; then
+	if [ ${aw_opt} = 'yes' ] ; then #registration
+        @animal_warper -base "NMT_v2.0_sym_05mm_SS.nii.gz"                                       \
+                       -input "${subid}_${session}_${class}+orig.HEAD"                           \
+                       -align_type all  -seg_followers "NMT_v2.0_sym_05mm_segmentation.nii.gz"   \
+                       -atlas_followers "CHARM_in_NMT_v2.0_sym_05mm.nii.gz"                      \
+                       -outdir "${output_dir}aw_result/${subid}_${session}_${class}"
+	fi
+	if  [ ${aw_opt} = 'no' ] ; then
+        echo  "please check your epi data"
+	fi
+fi
