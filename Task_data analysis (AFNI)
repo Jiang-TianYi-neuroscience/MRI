@@ -7,7 +7,7 @@ echo -e "\033[1;41;33m ${str2} \033[0m"
 #input necessary info
 read -e -n20 -a subid -p subid:
 read -e -n20 -a anat -p anat_session:
-read -e -n10 -a blur_size -p blur_size:
+read -e -n10 -a blur_size  -p blur_size:
 #read -e -n999 -a s_time   -p stimulus_time:
 read -e -n10 -a type    -p regress_stim_types:
 read -e -n10 -a polort -p polort:
