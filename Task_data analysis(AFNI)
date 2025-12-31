@@ -1,0 +1,80 @@
+#IMPORTANT warning
+str1="Please make sure you know what you are doing !!!"  
+str2="Otherwise , try to type those commands word by word."
+echo -e "\033[1;41;33m ${str1} \033[0m" 
+echo -e "\033[1;41;33m ${str2} \033[0m"
+
+#input necessary info
+read -e -n20 -a subid -p subid:
+read -e -n20 -a anat -p anat_session:
+read -e -n10 -a blur_size -p blur_size:
+#read -e -n999 -a s_time   -p stimulus_time:
+read -e -n10 -a type    -p regress_stim_types:
+read -e -n10 -a polort -p polort:
+read -e -n10 -a dxyz  -p master_dxyz:
+read -e -n10 -a rm_tr -p remove_TRs:
+
+declare -a myArray
+while IFS=' ' read -r index set
+do	
+  myArray[$index]="$set"
+done < "list.txt"
+
+for i in "${!myArray[@]}" ; do
+s_time=set$(printf "%02d\n" "${myArray[$i]}")
+run=$(printf "%02d\n" "$i")
+echo $i $s_time
+
+#data list
+epi=${subid}_${run}_epi+orig.HEAD
+
+#TASK ANALYSIS
+afni_proc.py                                                                                                      \
+-subj_id                  GM_tlrc_${subid}_${run}                                                                 \
+-copy_anat                ${subid}_${anat}_anat*_ns.nii.gz                                                        \
+-anat_has_skull           no                                                                                      \
+-dsets                    $epi                                                                                    \
+-blocks                   tshift align tlrc volreg mask blur scale regress                                        \
+-radial_correlate_blocks  tcat volreg                                                                             \
+-tcat_remove_first_trs    ${rm_tr}                                                                                \
+-align_unifize_epi        local                                                                                   \
+-align_opts_aea           -cost lpa  -deoblique on -cmass cmass+a -ginormous_move -check_flip  -align_centers on  \
+-tlrc_base                "NMT_v2.0_sym_05mm_SS.nii.gz"                                                           \
+-tlrc_NL_warp                                                                                                     \
+-tlrc_NL_warped_dsets                                                                                             \
+         ${subid}_${anat}_anat*_warp2std_nsu.nii.gz                                                               \
+         ${subid}_${anat}_anat*_composite_linear_to_template.1D                                                   \
+         ${subid}_${anat}_anat*_shft_WARP.nii.gz                                                                  \
+-volreg_tlrc_warp                                                                                                 \
+-volreg_align_to   MIN_OUTLIER                                                                                    \
+-volreg_align_e2a                                                                                                 \
+-volreg_warp_dxyz  $dxyz                                                                                          \
+-volreg_compute_tsnr      yes                                                                                     \
+-ROI_import GM  "cortical_mask.nii"                                                                               \
+-mask_apply  GM                                                                                                   \
+-mask_epi_anat            yes                                                                                     \
+-blur_size $blur_size                                                                                             \
+-blur_in_mask yes                                                                                                 \
+-regress_polort           $polort                                                                                 \
+-regress_local_times                                                                                              \
+-regress_stim_times     stimulus_time/${s_time}/FILE1.1D ......                                                   \
+-regress_stim_labels    LABEL1 ......                                                                             \
+-regress_basis          'MIONN(24)'                                                                               \ #opt
+-regress_opts_3dD                                                                                                 \
+           -bout                                                                                                  \
+	         -jobs 32                                                                                               \
+           -gltsym 'SYM: +A -B'                        -glt_label 1 A-B                                           \
+           -gltsym ......                                                                                         \
+-regress_apply_mot_types  demean                                                                                  \
+-regress_motion_per_run                                                                                           \
+-regress_compute_fitts                                                                                            \
+-regress_make_ideal_sum   sum_ideal.1D                                                                            \
+-regress_reml_exec                                                                                                \
+-regress_est_blur_epits                                                                                           \
+-regress_est_blur_errts                                                                                           \
+-regress_run_clustsim      no                                                                                     \
+-html_review_style         pythonic                                                                               \
+-execute                                                                                                          \
+
+done
+
